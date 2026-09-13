@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cheater"
+version = "0.1.0"
+description = "CHEATER: stress-test a reward verifier before spending RL compute"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+neural = ["torch>=2.2", "transformers>=4.44", "trl>=0.11", "datasets>=2.20", "accelerate>=0.33"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+cheater = "cheater.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["cheater*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
