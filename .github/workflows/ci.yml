@@ -2,8 +2,16 @@ name: ci
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
+
+# A branch push that also has an open PR would otherwise run every job twice,
+# once per event. Restricting push to main leaves branch validation to the
+# pull_request event, and the concurrency group cancels superseded runs when
+# commits land faster than CI finishes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
