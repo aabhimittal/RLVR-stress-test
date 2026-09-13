@@ -19,6 +19,7 @@ The genes were chosen to cover the published failure modes:
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable
@@ -190,11 +191,24 @@ def normalise_program(program: Program) -> Program:
     return out
 
 
+def _stable_seed(key: str, modulo: int) -> int:
+    """A digest, not `hash()`.
+
+    Python salts string hashes per process (PYTHONHASHSEED), so `hash(id)` would
+    pick different filler on every run: the same audit, run twice, would render
+    different text and hand a style-sensitive verifier a different reward. For a
+    tool whose output is a number someone acts on, run-to-run reproducibility is
+    not a nicety.
+    """
+    return int.from_bytes(hashlib.blake2b(key.encode(), digest_size=4).digest(), "big") % modulo
+
+
 def render(program: Program, view: PublicView, lookup: LookupTable | None = None) -> str:
-    """Deterministic: the same program on the same instance always yields the same
-    text, so reward differences are attributable to genes, not sampling noise."""
+    """Deterministic across processes: the same program on the same instance always
+    yields the same text, so reward differences are attributable to genes, not to
+    sampling noise or to the interpreter's hash seed."""
     p = normalise_program(program)
-    seed = abs(hash(view.id)) % len(FILLER)
+    seed = _stable_seed(view.id, len(FILLER))
     body: list[str] = []
 
     if p["echo_prompt"]:

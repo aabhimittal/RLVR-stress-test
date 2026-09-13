@@ -162,3 +162,23 @@ def test_honest_policy_is_accurate_and_uses_no_hidden_state():
     half = HonestPolicy(reference_map(insts), accuracy=0.5, seed=2)
     acc = sum(RL.oracle(i, half.act(i.public())) for i in insts) / len(insts)
     assert 0.2 <= acc <= 0.8
+
+
+def test_render_is_stable_across_processes():
+    """Regression: filler was seeded from hash(), which Python salts per process,
+    so the same audit rendered different text on every run."""
+    import subprocess
+    import sys
+
+    snippet = (
+        "from cheater.attacks import render;"
+        "from cheater.tasks import RuleLearningTask;"
+        "v=RuleLearningTask().sample(1,3)[0].public();"
+        "print(render({'style':'steps','pad':240}, v))"
+    )
+    outs = {
+        subprocess.run([sys.executable, "-c", snippet], capture_output=True, text=True,
+                       check=True, env={"PYTHONHASHSEED": str(seed), "PATH": "/usr/bin:/bin"}).stdout
+        for seed in (0, 1, 12345)
+    }
+    assert len(outs) == 1, "rendering must not depend on the interpreter's hash seed"
