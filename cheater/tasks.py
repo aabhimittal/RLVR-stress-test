@@ -35,8 +35,13 @@ def extract_answers(text: str) -> list[str]:
 def normalise(s: str) -> str:
     s = (s or "").strip().lower()
     s = s.replace("$", "").replace(",", "").replace("\\", "")
+    # `<answer>\boxed{18}</answer>` is the output contract real recipes ask for, and
+    # it matches two extraction patterns at once. Unwrapping boxed here keeps that
+    # from reading as two conflicting answers, which would score a correct,
+    # format-compliant response as wrong.
+    s = re.sub(r"boxed\s*\{(.*)\}", r"\1", s)
     s = re.sub(r"\s+", " ", s)
-    return s.rstrip(".")
+    return s.strip().rstrip(".")
 
 
 def _as_number(s: str) -> float | None:

@@ -25,9 +25,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
-        run: pip install -e '.[dev]'
+        run: pip install -e '.[dev,verify]'
       - name: Tests
         run: python -m pytest -q
       - name: Self-validation against known hacks
-        # Non-zero exit means a fixture came back with the wrong verdict.
-        run: python -m cheater benchmark --quiet
+        # Non-zero exit means a fixture came back with the wrong verdict. --real also
+        # audits published open-r1 reward functions on vendored labelled data.
+        run: python -m cheater benchmark --real --quiet
