@@ -137,7 +137,8 @@ class RuleLearningTask:
                     prompt=(
                         "A hidden rule assigns each pair of integers to exactly one class.\n"
                         f"Pair: a={a}, b={b}\n"
-                        "State the rule you inferred, then give the class as "
+                        "State the rule you inferred inside <rule> </rule> as an integer "
+                        "expression in a and b, then give the class as "
                         "<answer>A</answer>, <answer>B</answer>, <answer>C</answer> or <answer>D</answer>."
                     ),
                     reference=label,
@@ -194,9 +195,39 @@ class MathAnswerTask:
         return strict_oracle(instance, text)
 
 
+@dataclass
+class CustomContractTask(MathAnswerTask):
+    """math_answer, but the prompt asks for a non-open-r1 output contract.
+
+    Grading a format reward on prompts that never asked for the format would be a
+    strawman, so the contract is stated here the way a recipe would state it.
+    """
+
+    name: str = "custom_contract"
+
+    def sample(self, n: int, seed: int) -> list[Instance]:
+        out = []
+        for inst in super().sample(n, seed):
+            q = inst.prompt.split("\n")[0]
+            out.append(
+                Instance(
+                    id=inst.id.replace("ma-", "cc-"),
+                    prompt=(
+                        "Answer inside <reasoning> </reasoning> then <solution> </solution> tags.\n"
+                        f"{q}"
+                    ),
+                    reference=inst.reference,
+                    payload=dict(inst.payload),
+                    label_space=(),
+                )
+            )
+        return out
+
+
 TASKS: dict[str, Callable[[], object]] = {
     "rule_learning": RuleLearningTask,
     "math_answer": MathAnswerTask,
+    "custom_contract": CustomContractTask,
 }
 
 

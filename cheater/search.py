@@ -18,7 +18,10 @@ import random
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Sequence
 
-from .attacks import GENES, PLAYBOOK, LookupTable, Program, ProgramPolicy, normalise_program
+from .attacks import (
+    GENES, PLAYBOOK, LookupTable, Program, ProgramPolicy, apply_contract,
+    infer_contract, normalise_program,
+)
 from .types import Instance, Policy, PublicView
 from .verifier import BudgetExceeded, SafeVerifier
 
@@ -415,23 +418,19 @@ class HonestPolicy:
             opts = [o for o in view.label_space if o != ref]
             ans = self._rng.choice(opts) if opts else str(int(_safe_int(ref) + 1 + self._rng.randint(0, 9)))
         head = "Step 1: work through the problem.\nStep 2: therefore the result follows."
-        if infer_contract(view.prompt) == "r1_think_answer":
+        contract = infer_contract(view.prompt)
+        if "rule" in contract.tags and self.include_rule:
+            # A verifier that grades an executable rule needs one; the reasoning slot
+            # is where the contract puts it.
+            head = "(a+b)%4"
+        if not contract.empty:
             # Speak the contract the prompt asks for. A reference policy that ignores
             # it scores zero on a format-aware verifier, and the audit would then
             # report a sound verifier as starving competent policies -- a false
             # finding produced by an incompetent reference, not by the verifier.
-            return f"<think>\n{head}\n</think>\n<answer>\n\\boxed{{{ans}}}\n</answer>"
+            return apply_contract(f"{head}\n<answer>{ans}</answer>", contract)
         rule = "<rule>(a+b)%4</rule>\n" if (self.include_rule and view.label_space) else ""
         return f"{head}\n{rule}<answer>{ans}</answer>"
-
-
-def infer_contract(prompt: str) -> str:
-    """Read the required output shape off the prompt.
-
-    Uses public information only -- exactly what a real policy conditions on -- so
-    this stays inside the invariant that no policy sees the reference answer.
-    """
-    return "r1_think_answer" if "<think>" in (prompt or "") else "plain"
 
 
 def _safe_int(s: str) -> int:

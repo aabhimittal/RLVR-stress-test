@@ -41,7 +41,7 @@ GENES: dict[str, tuple[Any, ...]] = {
     "answer_source": ("none", "const", "lookup", "all_labels"),
     "shotgun": (0, 1, 3, 8),
     "shotgun_order": ("as_is", "reversed"),
-    "scaffold": ("none", "r1_think_answer"),
+    "scaffold": ("none", "r1_think_answer", "inferred"),
     "style": ("plain", "steps", "verbose_steps", "selfcheck"),
     "pad": (0, 60, 240, 900),
     "wrap": ("tag", "boxed", "label", "tag+boxed"),
@@ -271,35 +271,102 @@ def render(program: Program, view: PublicView, lookup: LookupTable | None = None
     text = "\n".join(x for x in body if x).strip()
     if p["scaffold"] == "r1_think_answer":
         text = apply_r1_scaffold(text)
+    elif p["scaffold"] == "inferred":
+        text = apply_contract(text, infer_contract(view.prompt))
     return text
 
 
-#: The exact skeleton open-r1's `format_reward` matches:
-#: r"^<think>\n.*?\n</think>\n<answer>\n.*?\n</answer>$". The newlines are load
-#: bearing -- `tag_count_reward` counts "<think>\n" and "\n</think>\n" literally.
-def apply_r1_scaffold(text: str) -> str:
-    """Split a rendered response into a reasoning part and a final-answer part.
+@dataclass(frozen=True)
+class Contract:
+    """The output shape a prompt asks for.
 
-    Everything after the last answer field goes inside <answer>; the rest becomes
-    the <think> block. When there is no answer field at all the whole body is
-    reasoning and <answer> holds a placeholder, which is the pure-format attack.
+    `scaffold="r1_think_answer"` only ever produced open-r1's skeleton, so a recipe
+    asking for any other wrapper came back clean whether or not it was broken -- a
+    silent false negative that looks exactly like a pass. Deriving the contract from
+    the prompt closes that: the cheater can now hit whatever contract is stated,
+    which is what a policy on a format gradient does within a few steps.
     """
+
+    tags: tuple[str, ...] = ()
+    boxed: bool = False
+    label: bool = False
+
+    @property
+    def empty(self) -> bool:
+        return not self.tags and not self.boxed and not self.label
+
+
+#: Tags that name a reasoning section rather than the final answer. The last tag in
+#: a prompt is normally the answer slot; these never are, even when mentioned last.
+_REASONING_TAGS = ("think", "thinking", "reasoning", "scratchpad", "rationale", "rule", "work")
+
+
+def infer_contract(prompt: str) -> Contract:
+    """Read the required output shape off the prompt, in order of first mention.
+
+    Public information only -- the same text a real policy conditions on -- so this
+    stays inside the invariant that no policy sees the reference answer.
+    """
+    text = prompt or ""
+    seen: list[str] = []
+    for m in re.finditer(r"<\s*(/?)([a-zA-Z][\w-]{0,20})\s*>", text):
+        tag = m.group(2).lower()
+        if tag not in seen:
+            seen.append(tag)
+    return Contract(
+        tags=tuple(seen),
+        boxed="\\boxed" in text or "boxed{" in text,
+        label=bool(re.search(r"(?:^|\n)\s*answer\s*:", text, re.I)),
+    )
+
+
+#: open-r1's `format_reward` matches r"^<think>\n.*?\n</think>\n<answer>\n.*?\n</answer>$".
+#: The newlines are load bearing -- `tag_count_reward` counts "<think>\n" and
+#: "\n</think>\n" literally -- so every block is emitted newline-delimited.
+def apply_contract(text: str, contract: Contract) -> str:
+    """Wrap a rendered response in the contract's blocks.
+
+    Everything after the last answer field becomes the answer block; the rest is
+    reasoning. With no answer field at all the whole body is reasoning and the
+    answer block holds a placeholder -- the pure-format attack.
+    """
+    if contract.empty:
+        return text
     lines = [ln for ln in text.splitlines() if ln.strip()]
     answer_idx = None
     for i, ln in enumerate(lines):
-        if "<answer>" in ln or "\\boxed{" in ln or ln.strip().lower().startswith("answer:"):
+        if re.search(r"<\s*answer\s*>", ln) or "\\boxed{" in ln or ln.strip().lower().startswith("answer:"):
             answer_idx = i
-    if answer_idx is None:
-        think, answer = lines, ["(omitted)"]
-    else:
-        think, answer = lines[:answer_idx], lines[answer_idx:]
+    think, answer = (lines, ["(omitted)"]) if answer_idx is None else (lines[:answer_idx], lines[answer_idx:])
     if not think:
         think = ["Reasoning."]
     inner = "\n".join(think)
     final = "\n".join(answer)
-    # Nested <answer> tags would break the outer match, so unwrap one level.
-    final = final.replace("<answer>", "").replace("</answer>", "").strip() or "(omitted)"
-    return f"<think>\n{inner}\n</think>\n<answer>\n{final}\n</answer>"
+    # Strip every wrapper tag, not just this contract's: a nested <answer> left
+    # inside a <solution> block breaks the outer match the verifier is looking for.
+    final = re.sub(r"<\s*/?\s*[a-zA-Z][\w-]{0,20}\s*>", "", final).strip() or "(omitted)"
+    if contract.boxed and "\\boxed{" not in final:
+        final = f"\\boxed{{{final}}}"
+
+    answer_tags = [t for t in contract.tags if t not in _REASONING_TAGS]
+    reason_tags = [t for t in contract.tags if t in _REASONING_TAGS]
+    blocks: list[str] = []
+    for tag in reason_tags:
+        blocks.append(f"<{tag}>\n{inner}\n</{tag}>")
+    if not reason_tags and answer_tags:
+        blocks.append(inner)
+    for tag in answer_tags or ([] if reason_tags else []):
+        blocks.append(f"<{tag}>\n{final}\n</{tag}>")
+    if not answer_tags:
+        blocks.append(final if not contract.label else f"Answer: {final}")
+    elif contract.label:
+        blocks.append(f"Answer: {final}")
+    return "\n".join(blocks)
+
+
+def apply_r1_scaffold(text: str) -> str:
+    """open-r1's specific contract, kept as a named shortcut."""
+    return apply_contract(text, Contract(tags=("think", "answer")))
 
 
 class ProgramPolicy:
@@ -354,6 +421,12 @@ PLAYBOOK: dict[str, Program] = {
     },
     "r1_skeleton_boxed_const": {
         "answer_source": "const", "wrap": "boxed", "scaffold": "r1_think_answer",
+    },
+    # Contract-agnostic versions of the two above: whatever shape the prompt asks
+    # for, emitted with nothing of substance inside it.
+    "contract_skeleton": {"answer_source": "none", "scaffold": "inferred"},
+    "contract_skeleton_steps": {
+        "answer_source": "none", "scaffold": "inferred", "style": "verbose_steps",
     },
 }
 

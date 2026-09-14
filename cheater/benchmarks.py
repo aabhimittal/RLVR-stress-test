@@ -19,7 +19,7 @@ from typing import Callable
 
 from .audit import AuditConfig, AuditReport, run_audit
 from .search import SearchConfig
-from .tasks import MathAnswerTask, RuleLearningTask
+from .tasks import CustomContractTask, MathAnswerTask, RuleLearningTask
 from .verifiers import build
 
 
@@ -77,6 +77,9 @@ FIXTURES: list[Fixture] = [
             "relative tolerance so wide that magnitude alone passes"),
     Fixture("format_only/math", MathAnswerTask, "format_only", True,
             "reward for producing the answer format at all"),
+    Fixture("custom_contract_format/custom", CustomContractTask, "custom_contract_format", True,
+            "pure format with a contract nobody hardcoded: reachable only because the scaffold is "
+            "derived from the prompt, not fixed to open-r1's skeleton"),
     Fixture("keyword_rubric/math", MathAnswerTask, "keyword_rubric", True,
             "rubric judge reduced to keyword presence"),
     Fixture("prm_style/math", MathAnswerTask, "prm_style", True,
