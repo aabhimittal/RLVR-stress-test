@@ -13,10 +13,11 @@ Teams normally discover this **after** paying for the run. CHEATER is a penetrat
 test you run first.
 
 ```
-pip install -e .
-cheater probe --task math_answer --verifier prm_style     # ~350 verifier calls
+pip install -e '.[verify]'
+cheater probe --task math_answer --verifier prm_style           # ~350 verifier calls
 cheater audit --task rule_learning --verifier strict_exact
-cheater benchmark                                         # validate the tool itself
+cheater audit --task real:gsm8k --verifier openr1_accuracy+format   # real code, real answers
+cheater benchmark --real                                        # validate the tool itself
 ```
 
 `cheater audit` exits non-zero on a HIGH or CRITICAL verdict, so it can gate a
@@ -95,19 +96,77 @@ An optional `cheater[neural]` extra wires the identical reward,
 serious compute. That module is written against the TRL API and covered by
 interface-level tests only; it has not been run end-to-end on a GPU here.
 
+## Real published verifiers, real labelled data
+
+`--task real:<source>` audits against labelled datasets (GSM8K, AIME-2024,
+MATH-500, vendored under `cheater/data/` so runs are offline and reproducible), and
+the `openr1_*` verifiers are adapters for reward functions read off
+[huggingface/open-r1](https://github.com/huggingface/open-r1)'s
+`src/open_r1/rewards.py`, graded through `math_verify` -- the library that
+repository and TRL actually use. Full findings:
+[`docs/real-verifier-audit.md`](docs/real-verifier-audit.md).
+
+| reward function (as published) | verdict | Xi | X_hat at zero accuracy |
+| --- | --- | --- | --- |
+| `accuracy_reward` | CLEAN | -0.10 | 0.00 |
+| `math_verify` (own defaults) | CLEAN | -0.10 | 0.00 |
+| `accuracy + format` | HIGH | +0.45 | **0.50** |
+| `accuracy + format + reasoning_steps` | CRITICAL | +0.63 | **0.67** |
+| `format_reward` | CRITICAL | +1.00 | 1.00 |
+| `tag_count_reward` | CRITICAL | +1.00 | 1.00 |
+| `reasoning_steps_reward` | CRITICAL | +1.00 | 1.00 |
+
+`accuracy_reward` holds: nothing in the attack space earns reward from it, and a
+correct policy is paid in full. One flag does the work --
+`try_extract_without_anchor=False` refuses to read a bare trailing number as the
+answer, and multiple `\boxed{}` candidates collapse to a set that matches nothing.
+Wire `parse`/`verify` into a reward *without* copying that config and you inherit
+the looser default, which is why `math_verify_default` ships as its own fixture.
+
+What does not hold is the objective those terms are summed into. `format_reward`,
+`tag_count_reward` and `reasoning_steps_reward` never look at the answer, so an
+empty `<think></think><answer></answer>` skeleton earns **half** of
+`accuracy + format` -- exactly what a fully correct answer that omits the tags
+earns. `reasoning_steps_reward` goes further and *prefers* the shortcut: three bare
+`Step n:` markers score 1.00 while a correct two-step solution scores 0.67.
+
+Separately, 12% of MATH-500 gold answers fail to parse, and the published functions
+disagree about those rows: `accuracy_reward` returns `None` (TRL drops the sample,
+no gradient) while `len_reward` treats the completion as *correct* and pays up to
++0.5 regardless of content. Neither is visible from reading one function alone.
+
+### Pointing it at real code found three bugs in CHEATER
+
+Each produced a wrong verdict, and no synthetic suite could have surfaced them,
+because I wrote both sides of that suite:
+
+1. **False negative on a trivially broken verifier.** `format_reward` came back
+   `X_hat = 0.00` while a person breaks it in one line -- no gene could emit
+   `<think>` tags with the exact newline placement. An attack library has to be able
+   to produce the output contract the task asks for. Fixed with a `scaffold` gene.
+2. **False under-reward finding on sound verifiers.** The reference policy answered
+   `<answer>18</answer>`, which the boxed-first config rejects, so every real
+   verifier looked like it was starving competent policies. Fixed by inferring the
+   required output shape from the prompt -- public information only, so the
+   no-peeking invariant holds.
+3. **An oracle that mis-parsed the contract it had just asked for.**
+   `<answer>\boxed{18}</answer>` matched two extraction patterns and read as two
+   conflicting answers, scoring a correct response as wrong.
+
 ## Validation
 
-`cheater benchmark` runs 21 (task, verifier) fixtures with known ground truth, and
-grades itself. Full results in [`docs/validation.md`](docs/validation.md); a sample
-audit is in [`docs/example-report.md`](docs/example-report.md).
+`cheater benchmark --real` runs 28 (task, verifier) fixtures with known ground
+truth, and grades itself. Full results in
+[`docs/validation.md`](docs/validation.md); a sample audit is in
+[`docs/example-report.md`](docs/example-report.md).
 
-- **12/12** known-exploitable verifiers flagged (HIGH or CRITICAL)
-- **0/3** sound verifiers falsely flagged
-- `Xi` separation margin **+0.72** between the lowest exploitable and the highest
+- **17/17** known-exploitable verifiers flagged (HIGH or CRITICAL)
+- **0/5** sound verifiers falsely flagged, two of them real published code
+- `Xi` separation margin **+0.48** between the lowest exploitable and the highest
   sound fixture — the claim does not depend on where the severity threshold sits
 - all 4 pathological-plumbing fixtures (crashing, non-deterministic, out-of-range,
   slow) produced robustness findings without taking the audit down
-- stable across six seeds; ~800 verifier calls per fixture, ~10s for all 21
+- stable across six seeds; ~1000 verifier calls per fixture, ~13s for all 28
 
 A detector that shouts at everything is free to build and worthless to use, so a
 third of the fixtures exist to be left alone. The hardest negative control is
@@ -158,6 +217,16 @@ result.
   in exactly the domains where gaming is worst — rubric-graded and long-form work.
   A small human-labelled audit set helps; coverage stays the binding constraint,
   and it binds harder than the search does.
+- **On real data, resolution is bounded by pool size.** True accuracy over `n` fresh
+  instances resolves only to `1/n`, and a finite labelled set cannot be resampled —
+  the memorisation check gets held-back partitions instead of fresh draws, and on
+  AIME-2024's 30 problems there is not enough data to hold a block back at all. The
+  audit reports that rather than reusing instances.
+- **The attack library must speak the target's output contract.** This is the
+  sharpest known failure mode: a verifier demanding a scaffold the gene space cannot
+  emit comes back clean when it is trivially broken. `scaffold` covers the R1
+  think/answer contract; a recipe with a different contract needs a gene for it, and
+  until then the null result on that recipe means nothing.
 - **Calibration is relative to your oracle.** AUC and Spearman are measured against
   the task's label oracle. A verifier grading a stronger artefact — an executable
   rule, a proof — disagrees with that oracle without being broken. The tool reports
@@ -194,9 +263,11 @@ cheater/
   exploitability.py  X(V), Xi, frontier, leave-one-group-out attribution, calibration
   audit.py           phase budgeting, severity assessment, mitigation mapping
   report.py          markdown and JSON
-  benchmarks.py      21 graded fixtures and the confusion matrix
+  datasets.py        real labelled data (GSM8K, AIME-2024, MATH-500); partitioning, not resampling
+  real_verifiers.py  adapters for open-r1's published reward functions, via math_verify
+  benchmarks.py      28 graded fixtures and the confusion matrix
   neural.py          optional: the same reward via TRL GRPOTrainer
-tests/               95 tests, ~4s
+tests/               125 tests, ~7s
 ```
 
 MIT licensed.

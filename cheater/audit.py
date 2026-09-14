@@ -156,6 +156,18 @@ class _Phase:
         return False
 
 
+def audit_set_for(task, n_seen: int = 48, n_fresh: int = 48, seed: int = 7) -> AuditSet:
+    """Generated tasks resample; real labelled pools are partitioned. One dispatch
+    point, shared by the CLI, the benchmark and `run_audit`, so the two paths cannot
+    drift apart."""
+    from .datasets import RealDatasetTask, build_real_audit_set
+    from .tasks import build_audit_set
+
+    if isinstance(task, RealDatasetTask):
+        return build_real_audit_set(task, n_seen=n_seen, n_fresh=n_fresh, seed=seed)
+    return build_audit_set(task, n_seen, n_fresh, seed=seed)
+
+
 def run_audit(
     task,
     verifier_fn,
@@ -163,9 +175,7 @@ def run_audit(
     audit_set: AuditSet | None = None,
 ) -> AuditReport:
     cfg = config or AuditConfig()
-    from .tasks import build_audit_set
-
-    aset = audit_set or build_audit_set(task, cfg.n_seen, cfg.n_fresh, seed=cfg.seed + 7)
+    aset = audit_set or audit_set_for(task, cfg.n_seen, cfg.n_fresh, seed=cfg.seed + 7)
     oracle: OracleFn = task.oracle
     v = SafeVerifier(verifier_fn, budget=cfg.budget, timeout_s=cfg.timeout_s)
     total = cfg.budget

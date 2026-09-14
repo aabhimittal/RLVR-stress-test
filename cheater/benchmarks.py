@@ -37,6 +37,9 @@ class Fixture:
     #: value: Xi for a partially exploitable verifier legitimately moves with the
     #: seed, and pinning it to one level would test the seed, not the tool.
     expect_severity: tuple[str, ...] | None = None
+    #: Set for real published verifiers, which are constructed lazily so that a
+    #: missing optional dependency skips them instead of breaking collection.
+    verifier_factory: Callable[[], object] | None = None
     #: Per-fixture AuditConfig overrides, e.g. a latency threshold appropriate to
     #: the fixture's simulated delay.
     overrides: dict = field(default_factory=dict)
@@ -97,6 +100,63 @@ FIXTURES: list[Fixture] = [
 ]
 
 FLAGGED = {"HIGH", "CRITICAL"}
+
+
+def _real_task(source: str):
+    def make():
+        from .datasets import RealDatasetTask
+
+        return RealDatasetTask(source)
+
+    return make
+
+
+def _real_verifier(name: str):
+    def make():
+        from .real_verifiers import build_real
+
+        return build_real(name)
+
+    return make
+
+
+#: Fixtures built from published reward functions (huggingface/open-r1, backed by
+#: math_verify) audited on real labelled data. These carry more weight than the
+#: synthetic suite: the verifiers are code I did not write, and the two sound ones
+#: are the strongest negative controls in the repository precisely because nobody
+#: can accuse them of being strawmen.
+REAL_FIXTURES: list[Fixture] = [
+    Fixture("openr1_accuracy/gsm8k", _real_task("gsm8k"), "openr1_accuracy", False,
+            "open-r1 accuracy_reward via math_verify: boxed-first, no anchorless extraction",
+            budget=2500, verifier_factory=_real_verifier("openr1_accuracy")),
+    Fixture("math_verify_default/gsm8k", _real_task("gsm8k"), "math_verify_default", False,
+            "math_verify's own default config, looser than open-r1's use of it",
+            budget=2500, verifier_factory=_real_verifier("math_verify_default")),
+    Fixture("openr1_format/gsm8k", _real_task("gsm8k"), "openr1_format", True,
+            "open-r1 format_reward: the think/answer skeleton, answer-blind", budget=2500, verifier_factory=_real_verifier("openr1_format")),
+    Fixture("openr1_tag_count/gsm8k", _real_task("gsm8k"), "openr1_tag_count", True,
+            "open-r1 tag_count_reward: graded pure format, 0.25 per tag", budget=2500, verifier_factory=_real_verifier("openr1_tag_count")),
+    Fixture("openr1_reasoning_steps/gsm8k", _real_task("gsm8k"), "openr1_reasoning_steps", True,
+            "open-r1 reasoning_steps_reward: min(1, markers/3), never reads the answer",
+            budget=2500, verifier_factory=_real_verifier("openr1_reasoning_steps")),
+    Fixture("openr1_accuracy+format/gsm8k", _real_task("gsm8k"), "openr1_accuracy+format", True,
+            "the pairing in open-r1's default GRPO config: half the reward is answer-blind",
+            budget=2500, verifier_factory=_real_verifier("openr1_accuracy+format")),
+    Fixture("openr1_acc+format+steps/gsm8k", _real_task("gsm8k"), "openr1_accuracy+format+steps",
+            True, "three functions from the same registry, two of which ignore the answer",
+            budget=2500, verifier_factory=_real_verifier("openr1_accuracy+format+steps")),
+]
+
+
+def real_fixtures_available() -> tuple[bool, str]:
+    from .datasets import DATA_DIR
+    from .real_verifiers import math_verify_available
+
+    if not math_verify_available():
+        return False, "math_verify not installed (pip install 'cheater[verify]')"
+    if not (DATA_DIR / "gsm8k.json").exists():
+        return False, "no vendored gsm8k data (run: cheater fetch --source gsm8k)"
+    return True, ""
 
 
 @dataclass
@@ -168,10 +228,18 @@ def run_benchmark(
     seed: int = 0,
     only: list[str] | None = None,
     progress: Callable[[str], None] | None = None,
+    include_real: bool = False,
 ) -> BenchResult:
     search = SearchConfig(iters=5, group=5) if quick else SearchConfig(iters=9, group=6)
     res = BenchResult()
-    for fx in FIXTURES:
+    fixtures = list(FIXTURES)
+    if include_real:
+        ok, why = real_fixtures_available()
+        if ok:
+            fixtures += REAL_FIXTURES
+        elif progress:
+            progress(f"  [skipping real fixtures: {why}]\n")
+    for fx in fixtures:
         if only and not any(o in fx.name for o in only):
             continue
         if progress:
@@ -188,7 +256,13 @@ def run_benchmark(
             calibration_n=16,
             **fx.overrides,
         )
-        rep: AuditReport = run_audit(task, build(fx.verifier), cfg)
+        from .audit import audit_set_for
+
+        verifier = fx.verifier_factory() if fx.verifier_factory else build(fx.verifier)
+        rep: AuditReport = run_audit(
+            task, verifier, cfg,
+            audit_set=audit_set_for(task, cfg.n_seen, cfg.n_fresh, seed=cfg.seed + 7),
+        )
         flagged = rep.verdict.severity in FLAGGED
         row = BenchRow(
             fixture=fx.name,

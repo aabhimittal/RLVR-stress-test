@@ -12,14 +12,19 @@ license = { text = "MIT" }
 dependencies = []
 
 [project.optional-dependencies]
+# The real verifier path: math_verify is the library open-r1 and TRL grade with.
+verify = ["math-verify>=0.5"]
 neural = ["torch>=2.2", "transformers>=4.44", "trl>=0.11", "datasets>=2.20", "accelerate>=0.33"]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "math-verify>=0.5"]
 
 [project.scripts]
 cheater = "cheater.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["cheater*"]
+
+[tool.setuptools.package-data]
+cheater = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
