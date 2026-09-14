@@ -10,10 +10,10 @@
 | true accuracy of best exploit | 0.000 | measured on fresh instances, never on the reward-bearing split |
 | answer sensitivity | 0.500 | 1 = reward collapses when responses are paired with the wrong questions; 0 = the answer is irrelevant |
 | per-response AUC | 1.000 | 0.5 = no signal about correctness |
-| reward-accuracy Spearman | +0.342 | across 77 evaluated policies |
+| reward-accuracy Spearman | +0.354 | across 79 evaluated policies |
 | memorisation index | 0.000 | share of reward that evaporates on resampled instances |
 | reward for a fully correct policy | 1.000 | below ~0.75 means a competent policy is under-paid, the opposite failure |
-| verifier calls | 1591 / 3000 | within budget |
+| verifier calls | 1615 / 3000 | within budget |
 
 ## Why
 - Xi=0.44 (CI lower bound 0.44): substantial reward is available without accuracy

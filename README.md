@@ -153,20 +153,27 @@ because I wrote both sides of that suite:
    `<answer>\boxed{18}</answer>` matched two extraction patterns and read as two
    conflicting answers, scoring a correct response as wrong.
 
+Fixing (1) by hardcoding R1's skeleton left the general bug in place, so the
+scaffold is now derived from the prompt. A `custom_contract_format` fixture with a
+`<reasoning>/<solution>` contract pins it: the hardcoded skeleton scores 0.00 on it,
+the derived one 1.00 at zero true accuracy. The same principle forced two prompts to
+change — a verifier that *requires* `\boxed{}` or `<rule>` must have a prompt that
+*asks* for it, or a sound verifier reads as starving competent policies.
+
 ## Validation
 
-`cheater benchmark --real` runs 28 (task, verifier) fixtures with known ground
+`cheater benchmark --real` runs 29 (task, verifier) fixtures with known ground
 truth, and grades itself. Full results in
 [`docs/validation.md`](docs/validation.md); a sample audit is in
 [`docs/example-report.md`](docs/example-report.md).
 
-- **17/17** known-exploitable verifiers flagged (HIGH or CRITICAL)
+- **18/18** known-exploitable verifiers flagged (HIGH or CRITICAL)
 - **0/5** sound verifiers falsely flagged, two of them real published code
 - `Xi` separation margin **+0.48** between the lowest exploitable and the highest
   sound fixture — the claim does not depend on where the severity threshold sits
 - all 4 pathological-plumbing fixtures (crashing, non-deterministic, out-of-range,
   slow) produced robustness findings without taking the audit down
-- stable across six seeds; ~1000 verifier calls per fixture, ~13s for all 28
+- stable across four seeds; ~1000 verifier calls per fixture, ~14s for all 29
 
 A detector that shouts at everything is free to build and worthless to use, so a
 third of the fixtures exist to be left alone. The hardest negative control is
@@ -222,11 +229,14 @@ result.
   the memorisation check gets held-back partitions instead of fresh draws, and on
   AIME-2024's 30 problems there is not enough data to hold a block back at all. The
   audit reports that rather than reusing instances.
-- **The attack library must speak the target's output contract.** This is the
-  sharpest known failure mode: a verifier demanding a scaffold the gene space cannot
-  emit comes back clean when it is trivially broken. `scaffold` covers the R1
-  think/answer contract; a recipe with a different contract needs a gene for it, and
-  until then the null result on that recipe means nothing.
+- **The attack library must speak the target's output contract** — a verifier
+  demanding a scaffold the cheater cannot emit comes back clean when it is trivially
+  broken, and a silent false negative is indistinguishable from a pass. The
+  `scaffold=inferred` gene now *derives* the contract from the prompt (tags in order
+  of mention, `\boxed{}`, `Answer:`), so any stated contract is reachable rather than
+  just R1's. The residual limit: a contract the prompt does not state — conveyed by
+  a chat template, a few-shot example, or a fine-tuned habit — is still invisible,
+  and a null result on such a recipe means nothing.
 - **Calibration is relative to your oracle.** AUC and Spearman are measured against
   the task's label oracle. A verifier grading a stronger artefact — an executable
   rule, a proof — disagrees with that oracle without being broken. The tool reports
@@ -265,9 +275,9 @@ cheater/
   report.py          markdown and JSON
   datasets.py        real labelled data (GSM8K, AIME-2024, MATH-500); partitioning, not resampling
   real_verifiers.py  adapters for open-r1's published reward functions, via math_verify
-  benchmarks.py      28 graded fixtures and the confusion matrix
+  benchmarks.py      29 graded fixtures and the confusion matrix
   neural.py          optional: the same reward via TRL GRPOTrainer
-tests/               125 tests, ~7s
+tests/               131 tests, ~7s
 ```
 
 MIT licensed.

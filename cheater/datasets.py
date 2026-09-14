@@ -38,15 +38,16 @@ from .types import AuditSet, Instance
 DATA_DIR = Path(__file__).resolve().parent / "data"
 ROWS_ENDPOINT = "https://datasets-server.huggingface.co/rows"
 
-#: Open-R1's system prompt. Included verbatim in the prompt so that the format and
-#: tag-count reward functions are being audited against the instruction they were
-#: written for -- grading a format reward on prompts that never asked for the
-#: format would be a strawman.
+#: Open-R1's system prompt, plus the boxed instruction its math configs carry.
+#: Included in the prompt so the format, tag-count and accuracy rewards are audited
+#: against the instruction they were written for -- grading a format reward on
+#: prompts that never asked for the format would be a strawman, and requiring a
+#: \boxed{} anchor without asking for one would make a sound verifier look broken.
 OPENR1_SYSTEM_PROMPT = (
     "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. "
     "The assistant first thinks about the reasoning process in the mind and then provides the user with "
     "the answer. The reasoning process and answer are enclosed within <think> </think> and "
-    "<answer> </answer> tags, respectively."
+    "<answer> </answer> tags, respectively. Put the final answer in \\boxed{}."
 )
 
 

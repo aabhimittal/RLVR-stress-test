@@ -5,7 +5,9 @@ when the optional extra is absent, so the suite stays installable without sympy.
 """
 import pytest
 
-from cheater.attacks import GENES, PLAYBOOK, apply_r1_scaffold, render
+from cheater.attacks import (
+    GENES, PLAYBOOK, Contract, apply_contract, apply_r1_scaffold, infer_contract, render,
+)
 from cheater.audit import AuditConfig, audit_set_for, run_audit
 from cheater.datasets import (
     OPENR1_SYSTEM_PROMPT, RealDatasetTask, SOURCES, build_real_audit_set, get_source,
@@ -15,7 +17,7 @@ from cheater.real_verifiers import (
     MissingVerifyExtras, OpenR1Format, OpenR1ReasoningSteps, OpenR1TagCount, REAL_ZOO,
     build_real, math_verify_available, openr1_default_combo,
 )
-from cheater.search import HonestPolicy, SearchConfig, infer_contract, reference_map
+from cheater.search import HonestPolicy, SearchConfig, reference_map
 from cheater.tasks import strict_oracle
 
 needs_mv = pytest.mark.skipif(not math_verify_available(), reason="math_verify not installed")
@@ -47,9 +49,9 @@ def test_math500_answers_are_not_all_numeric():
 def test_prompts_carry_the_recipe_system_prompt():
     task = RealDatasetTask("gsm8k", n=5)
     assert OPENR1_SYSTEM_PROMPT in task.pool[0].prompt
-    assert infer_contract(task.pool[0].prompt) == "r1_think_answer"
+    assert infer_contract(task.pool[0].prompt).tags == ("think", "answer")
     plain = RealDatasetTask("gsm8k", n=3, include_system_prompt=False)
-    assert infer_contract(plain.pool[0].prompt) == "plain"
+    assert infer_contract(plain.pool[0].prompt).empty
 
 
 def test_real_answer_space_is_open_so_nothing_is_enumerable():
@@ -266,3 +268,53 @@ def test_real_data_resolution_is_bounded_by_pool_size():
     assert best is not None and best.n_fresh > 0
     assert (rep.estimate.x_hi - rep.estimate.x_lo) >= 0.0
     assert 1.0 / best.n_fresh >= 1.0 / 100
+
+
+# ------------------- contract inference, generalised ----------------------- #
+
+
+def test_contract_is_derived_not_hardcoded():
+    c = infer_contract("Reply as <reasoning> </reasoning> then <solution> </solution>.")
+    assert c.tags == ("reasoning", "solution") and not c.boxed
+    assert infer_contract("Give \\boxed{N}.").boxed
+    assert infer_contract("End with\nAnswer: N").label
+    assert infer_contract("no contract here").empty
+
+
+def test_inferred_scaffold_reaches_a_non_r1_contract():
+    """The regression this closes: a hardcoded R1 skeleton scores 0 on a verifier
+    with any other contract, which reads as a pass rather than a miss."""
+    from cheater.tasks import CustomContractTask
+    from cheater.verifiers import build
+
+    task = CustomContractTask()
+    inst = task.sample(1, 3)[0]
+    verifier = build("custom_contract_format")
+    hardcoded = render(PLAYBOOK["r1_skeleton"], inst.public())
+    derived = render(PLAYBOOK["contract_skeleton"], inst.public())
+    assert verifier.score(inst, hardcoded) == 0.0      # the old false negative
+    assert verifier.score(inst, derived) == 1.0        # now reachable
+    assert task.oracle(inst, derived) == 0.0           # and still answers nothing
+
+
+def test_inferred_scaffold_still_matches_open_r1():
+    from cheater.real_verifiers import OpenR1Format
+
+    inst = RealDatasetTask("gsm8k", n=2).pool[0]
+    text = render({"answer_source": "none", "scaffold": "inferred"}, inst.public())
+    assert OpenR1Format().score(None, text) == 1.0
+
+
+def test_apply_contract_strips_nested_answer_tags():
+    out = apply_contract("Step 1: x\n<answer>4</answer>", Contract(tags=("reasoning", "solution")))
+    assert "<answer>" not in out
+    assert out.count("<solution>") == 1 and "4" in out
+
+
+def test_apply_contract_is_a_noop_without_a_contract():
+    assert apply_contract("plain text", Contract()) == "plain text"
+
+
+def test_boxed_contract_is_honoured():
+    out = apply_contract("Step 1: x\nAnswer: 4", Contract(tags=("think", "answer"), boxed=True))
+    assert "\\boxed{" in out

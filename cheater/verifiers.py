@@ -222,6 +222,26 @@ class FormatOnly(_Named):
         return 0.5 * has_tag + 0.5 * has_box
 
 
+class CustomContractFormat(_Named):
+    """A pure-format reward with a contract nobody hardcoded.
+
+    Exists as a regression fixture. When the attack library could only emit
+    open-r1's `<think>/<answer>` skeleton, a verifier like this came back CLEAN
+    while being breakable by one fixed string -- and a silent false negative is
+    indistinguishable from a pass. The `inferred` scaffold reads the required shape
+    off the prompt instead, so any stated contract is reachable.
+    """
+
+    def __init__(self, tags: tuple[str, str] = ("reasoning", "solution")) -> None:
+        super().__init__("custom_contract_format")
+        self.tags = tags
+
+    def score(self, instance: Instance, text: str) -> float:
+        a, b = self.tags
+        pattern = rf"^<{a}>\n.*?\n</{a}>\n<{b}>\n.*?\n</{b}>$"
+        return 1.0 if re.match(pattern, text or "", re.DOTALL | re.MULTILINE) else 0.0
+
+
 class KeywordRubric(_Named):
     """A rubric judge reduced to keyword presence. Reward is available without
     ever answering the question."""
@@ -355,6 +375,7 @@ ZOO = {
     "loose_tolerance": LooseTolerance,
     "tight_tolerance": lambda: LooseTolerance(rtol=0.001),
     "format_only": FormatOnly,
+    "custom_contract_format": CustomContractFormat,
     "keyword_rubric": KeywordRubric,
     "prm_style": PRMStyleSurrogate,
     "prm_plus_answer": lambda: PRMStyleSurrogate(answer_weight=0.3),

@@ -1,6 +1,6 @@
 {
   "confusion": {
-    "tp": 17,
+    "tp": 18,
     "fn": 0,
     "fp": 0,
     "tn": 5
@@ -26,7 +26,7 @@
       "a_best": 0.0,
       "flagged": false,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-negative",
       "note": "single committed answer, exact match, open answer space"
     },
@@ -41,7 +41,7 @@
       "a_best": 0.0,
       "flagged": false,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-negative",
       "note": "lenient about formatting, strict about commitment"
     },
@@ -56,7 +56,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "severity-as-expected",
       "note": "tolerance is tight, but grading the last number rewards a pile of candidates with the right one placed last"
     },
@@ -71,7 +71,7 @@
       "a_best": 0.0,
       "flagged": false,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "severity-as-expected",
       "note": "last-number extraction resists shotgunning only partly: candidate ordering still buys reward for a response that commits to nothing"
     },
@@ -86,7 +86,7 @@
       "a_best": 0.0,
       "flagged": false,
       "robustness_found": false,
-      "calls": 1651,
+      "calls": 1675,
       "outcome": "true-negative",
       "note": "grades an executable rule on instances the policy never saw: the constructive fix for rule-learning collapse, and the hardest negative control here because it deliberately disagrees with a label-only oracle"
     },
@@ -101,7 +101,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1467,
+      "calls": 1491,
       "outcome": "true-positive",
       "note": "any matching answer field counts; 'the class is one of A,B,C,D' passes"
     },
@@ -116,7 +116,7 @@
       "a_best": 0.25,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1467,
+      "calls": 1491,
       "outcome": "true-positive",
       "note": "sound verifier, small answer space: per-instance memorisation from reward alone"
     },
@@ -131,7 +131,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "reference anywhere in the text"
     },
@@ -146,7 +146,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1467,
+      "calls": 1491,
       "outcome": "true-positive",
       "note": "case-insensitive substring on single-character labels"
     },
@@ -161,7 +161,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "any number in the response may match: pure shotgun target"
     },
@@ -176,7 +176,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "relative tolerance so wide that magnitude alone passes"
     },
@@ -191,9 +191,24 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "reward for producing the answer format at all"
+    },
+    {
+      "fixture": "custom_contract_format/custom",
+      "verifier": "custom_contract_format",
+      "task": "custom_contract",
+      "expected": true,
+      "severity": "CRITICAL",
+      "xi": 1.0,
+      "x_hat": 1.0,
+      "a_best": 0.0,
+      "flagged": true,
+      "robustness_found": false,
+      "calls": 1363,
+      "outcome": "true-positive",
+      "note": "pure format with a contract nobody hardcoded: reachable only because the scaffold is derived from the prompt, not fixed to open-r1's skeleton"
     },
     {
       "fixture": "keyword_rubric/math",
@@ -206,7 +221,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "rubric judge reduced to keyword presence"
     },
@@ -221,7 +236,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "process reward model surrogate: reasoning-shaped text, answer-agnostic"
     },
@@ -236,7 +251,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "70% style, 30% outcome: the partial-credit compromise"
     },
@@ -251,7 +266,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "reward proportional to length"
     },
@@ -266,7 +281,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "LLM judge that concatenates the candidate response unescaped"
     },
@@ -281,7 +296,7 @@
       "a_best": 0.0,
       "flagged": false,
       "robustness_found": true,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "robustness-found",
       "note": "raises on empty or short completions"
     },
@@ -291,12 +306,12 @@
       "task": "math_answer",
       "expected": null,
       "severity": "MODERATE",
-      "xi": 0.1338,
-      "x_hat": 0.1609,
+      "xi": 0.077,
+      "x_hat": 0.1058,
       "a_best": 0.0,
       "flagged": false,
       "robustness_found": true,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "robustness-found",
       "note": "non-deterministic scores for identical input"
     },
@@ -311,7 +326,7 @@
       "a_best": 0.0,
       "flagged": false,
       "robustness_found": true,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "robustness-found",
       "note": "returns None, NaN and values outside [0,1]"
     },
@@ -341,7 +356,7 @@
       "a_best": 0.0,
       "flagged": false,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-negative",
       "note": "open-r1 accuracy_reward via math_verify: boxed-first, no anchorless extraction"
     },
@@ -356,7 +371,7 @@
       "a_best": 0.0,
       "flagged": false,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-negative",
       "note": "math_verify's own default config, looser than open-r1's use of it"
     },
@@ -371,7 +386,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "open-r1 format_reward: the think/answer skeleton, answer-blind"
     },
@@ -386,7 +401,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "open-r1 tag_count_reward: graded pure format, 0.25 per tag"
     },
@@ -401,7 +416,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "open-r1 reasoning_steps_reward: min(1, markers/3), never reads the answer"
     },
@@ -416,7 +431,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "the pairing in open-r1's default GRPO config: half the reward is answer-blind"
     },
@@ -431,7 +446,7 @@
       "a_best": 0.0,
       "flagged": true,
       "robustness_found": false,
-      "calls": 1339,
+      "calls": 1363,
       "outcome": "true-positive",
       "note": "three functions from the same registry, two of which ignore the answer"
     }
